@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:pose_tracker/providers/workout_provider.dart';
 import 'package:pose_tracker/widgets/exercise_card.dart';
-import 'package:pose_tracker/screens/camera_workout_screen.dart';
+import 'package:pose_tracker/screens/exercise_detail_screen.dart';
 
 class HomeScreen extends StatelessWidget {
   const HomeScreen({super.key});
@@ -47,7 +47,7 @@ class HomeScreen extends StatelessWidget {
                       Navigator.push(
                         context,
                         MaterialPageRoute(
-                          builder: (_) => CameraWorkoutScreen(exercise: exercise),
+                          builder: (_) => ExerciseDetailScreen(exercise: exercise),
                         ),
                       );
                     },

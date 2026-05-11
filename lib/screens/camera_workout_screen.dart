@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'dart:async';
+import 'dart:ui';
+import 'package:camera/camera.dart';
 import 'package:pose_tracker/models/exercise.dart';
 import 'package:pose_tracker/core/theme/app_colors.dart';
 import 'package:pose_tracker/screens/result_screen.dart';
@@ -14,6 +16,10 @@ class CameraWorkoutScreen extends StatefulWidget {
 }
 
 class _CameraWorkoutScreenState extends State<CameraWorkoutScreen> {
+  CameraController? _controller;
+  List<CameraDescription>? _cameras;
+  bool _isCameraInitialized = false;
+
   int _reps = 0;
   int _seconds = 0;
   Timer? _timer;
@@ -24,7 +30,37 @@ class _CameraWorkoutScreenState extends State<CameraWorkoutScreen> {
   @override
   void initState() {
     super.initState();
+    _initializeCamera();
     _startCountdown();
+  }
+
+  Future<void> _initializeCamera() async {
+    _cameras = await availableCameras();
+    if (_cameras != null && _cameras!.isNotEmpty) {
+      // Use front camera if available
+      final frontCamera = _cameras!.firstWhere(
+        (camera) => camera.lensDirection == CameraLensDirection.front,
+        orElse: () => _cameras!.first,
+      );
+
+      _controller = CameraController(
+        frontCamera,
+        ResolutionPreset.high,
+        enableAudio: false,
+        imageFormatGroup: ImageFormatGroup.bgra8888,
+      );
+
+      try {
+        await _controller!.initialize();
+        if (mounted) {
+          setState(() {
+            _isCameraInitialized = true;
+          });
+        }
+      } catch (e) {
+        debugPrint('Camera initialization error: $e');
+      }
+    }
   }
 
   void _startCountdown() {
@@ -89,6 +125,7 @@ class _CameraWorkoutScreenState extends State<CameraWorkoutScreen> {
   @override
   void dispose() {
     _timer?.cancel();
+    _controller?.dispose();
     super.dispose();
   }
 
@@ -98,14 +135,31 @@ class _CameraWorkoutScreenState extends State<CameraWorkoutScreen> {
       backgroundColor: Colors.black, // Mocking camera background
       body: Stack(
         children: [
-          // MOCK CAMERA VIEW OR SKELETON
-          Center(
-            child: Icon(
-              Icons.accessibility_new,
-              size: 250,
-              color: Colors.white.withOpacity(0.2), // Skeleton mock
+          // CAMERA PREVIEW
+          if (_isCameraInitialized && _controller != null)
+            Positioned.fill(
+              child: AspectRatio(
+                aspectRatio: _controller!.value.aspectRatio,
+                child: CameraPreview(_controller!),
+              ),
+            )
+          else
+            Container(
+              color: Colors.black,
+              child: const Center(
+                child: CircularProgressIndicator(color: AppColors.primary),
+              ),
             ),
-          ),
+
+          // OVERLAY FOR SKELETON (MOCK FOR NOW)
+          if (!_isCountdown)
+            Center(
+              child: Icon(
+                Icons.accessibility_new,
+                size: 250,
+                color: Colors.white.withOpacity(0.1),
+              ),
+            ),
 
           SafeArea(
             child: Column(
@@ -117,30 +171,20 @@ class _CameraWorkoutScreenState extends State<CameraWorkoutScreen> {
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                        decoration: BoxDecoration(
-                          color: Colors.black54,
-                          borderRadius: BorderRadius.circular(20),
-                        ),
+                      _buildGlassContainer(
                         child: Text(
                           widget.exercise.name,
-                          style: const TextStyle(fontSize: 18, color: Colors.white),
+                          style: const TextStyle(fontSize: 18, color: Colors.white, fontWeight: FontWeight.bold),
                         ),
                       ),
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                        decoration: BoxDecoration(
-                          color: Colors.black54,
-                          borderRadius: BorderRadius.circular(20),
-                        ),
+                      _buildGlassContainer(
                         child: Row(
                           children: [
-                            const Icon(Icons.timer, color: Colors.white, size: 18),
+                            const Icon(Icons.timer, color: AppColors.primary, size: 20),
                             const SizedBox(width: 8),
                             Text(
                               _formatTime(),
-                              style: const TextStyle(fontSize: 18, color: Colors.white),
+                              style: const TextStyle(fontSize: 18, color: Colors.white, fontWeight: FontWeight.bold),
                             ),
                           ],
                         ),
@@ -158,13 +202,16 @@ class _CameraWorkoutScreenState extends State<CameraWorkoutScreen> {
                     ),
                   )
                 else
-                  Text(
-                    _reps.toString(),
-                    style: const TextStyle(
-                      fontSize: 140,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.white,
-                      shadows: [Shadow(blurRadius: 20, color: AppColors.primary)],
+                  _buildGlassContainer(
+                    padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 10),
+                    child: Text(
+                      _reps.toString(),
+                      style: const TextStyle(
+                        fontSize: 100,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.white,
+                        shadows: [Shadow(blurRadius: 20, color: AppColors.primary)],
+                      ),
                     ),
                   ),
 
@@ -212,6 +259,23 @@ class _CameraWorkoutScreenState extends State<CameraWorkoutScreen> {
             ),
           ),
         ],
+      ),
+    );
+  }
+  Widget _buildGlassContainer({required Widget child, EdgeInsets? padding}) {
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(24),
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+        child: Container(
+          padding: padding ?? const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+          decoration: BoxDecoration(
+            color: Colors.white.withOpacity(0.1),
+            borderRadius: BorderRadius.circular(24),
+            border: Border.all(color: Colors.white.withOpacity(0.2)),
+          ),
+          child: child,
+        ),
       ),
     );
   }

@@ -38,12 +38,22 @@ class ExerciseCard extends StatelessWidget {
                     exercise.name,
                     style: Theme.of(context).textTheme.titleLarge,
                   ),
-                  const SizedBox(height: 4),
-                  Text(
-                    exercise.description,
-                    style: Theme.of(context).textTheme.bodyMedium,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
+                  const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      _buildMiniBadge(exercise.difficulty, AppColors.primary),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          exercise.musclesTargeted.join(', '),
+                          style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                            color: AppColors.textSecondary,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ],
                   ),
                 ],
               ),
@@ -56,6 +66,26 @@ class ExerciseCard extends StatelessWidget {
               iconSize: 48,
             )
           ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildMiniBadge(String label, Color color) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.1),
+        borderRadius: BorderRadius.circular(4),
+        border: Border.all(color: color.withOpacity(0.3)),
+      ),
+      child: Text(
+        label.toUpperCase(),
+        style: TextStyle(
+          color: color,
+          fontSize: 8,
+          fontWeight: FontWeight.bold,
+          letterSpacing: 0.5,
         ),
       ),
     );
