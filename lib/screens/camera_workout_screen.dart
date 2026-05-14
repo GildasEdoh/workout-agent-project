@@ -2,9 +2,13 @@ import 'package:flutter/material.dart';
 import 'dart:async';
 import 'dart:ui';
 import 'package:camera/camera.dart';
+import 'package:google_mlkit_pose_detection/google_mlkit_pose_detection.dart';
+import 'package:pose_tracker/core/ml/mediapipe_pose_service.dart';
+import 'package:pose_tracker/core/ml/rep_counter.dart';
 import 'package:pose_tracker/models/exercise.dart';
 import 'package:pose_tracker/core/theme/app_colors.dart';
 import 'package:pose_tracker/screens/result_screen.dart';
+import 'package:pose_tracker/widgets/pose_painter.dart';
 
 class CameraWorkoutScreen extends StatefulWidget {
   final Exercise exercise;
@@ -20,6 +24,11 @@ class _CameraWorkoutScreenState extends State<CameraWorkoutScreen> {
   List<CameraDescription>? _cameras;
   bool _isCameraInitialized = false;
 
+  final MediaPipePoseService _poseDetector = MediaPipePoseService();
+  late RepCounter _repCounter;
+  List<Pose> _poses = [];
+  bool _isFrontCamera = true;
+
   int _reps = 0;
   int _seconds = 0;
   Timer? _timer;
@@ -30,6 +39,7 @@ class _CameraWorkoutScreenState extends State<CameraWorkoutScreen> {
   @override
   void initState() {
     super.initState();
+    _repCounter = RepCounter(widget.exercise);
     _initializeCamera();
     _startCountdown();
   }
@@ -55,6 +65,35 @@ class _CameraWorkoutScreenState extends State<CameraWorkoutScreen> {
         if (mounted) {
           setState(() {
             _isCameraInitialized = true;
+            _isFrontCamera = frontCamera.lensDirection == CameraLensDirection.front;
+          });
+          
+          _controller!.startImageStream((CameraImage image) async {
+            if (_isPaused || _isCountdown) return;
+
+            final poses = await _poseDetector.processCameraImage(
+              image,
+              _controller!.description.sensorOrientation,
+              _controller!.description.lensDirection,
+            );
+
+            // If poses is null, the detector was busy running on a previous frame.
+            if (poses == null) return;
+
+            if (mounted) {
+              setState(() {
+                _poses = poses;
+              });
+
+              // Process each pose for rep counting (usually we just track the main person, index 0)
+              if (poses.isNotEmpty) {
+                if (_repCounter.countRep(poses.first)) {
+                  setState(() {
+                    _reps++;
+                  });
+                }
+              }
+            }
           });
         }
       } catch (e) {
@@ -87,10 +126,6 @@ class _CameraWorkoutScreenState extends State<CameraWorkoutScreen> {
       if (!_isPaused) {
         setState(() {
           _seconds++;
-          // Simulate rep increment every 4 seconds
-          if (_seconds % 4 == 0) {
-            _reps++;
-          }
         });
       }
     });
@@ -125,7 +160,9 @@ class _CameraWorkoutScreenState extends State<CameraWorkoutScreen> {
   @override
   void dispose() {
     _timer?.cancel();
+    _controller?.stopImageStream();
     _controller?.dispose();
+    _poseDetector.dispose();
     super.dispose();
   }
 
@@ -140,7 +177,21 @@ class _CameraWorkoutScreenState extends State<CameraWorkoutScreen> {
             Positioned.fill(
               child: AspectRatio(
                 aspectRatio: _controller!.value.aspectRatio,
-                child: CameraPreview(_controller!),
+                child: Stack(
+                  fit: StackFit.expand,
+                  children: [
+                    CameraPreview(_controller!),
+                    if (!_isCountdown)
+                      CustomPaint(
+                        painter: PosePainter(
+                          poses: _poses,
+                          // Render logic uses physical camera dimensions to map to screen
+                          imageSize: Size(_controller?.value.previewSize?.height ?? 640, _controller?.value.previewSize?.width ?? 480),
+                          isFrontCamera: _isFrontCamera,
+                        ),
+                      ),
+                  ],
+                ),
               ),
             )
           else
@@ -148,16 +199,6 @@ class _CameraWorkoutScreenState extends State<CameraWorkoutScreen> {
               color: Colors.black,
               child: const Center(
                 child: CircularProgressIndicator(color: AppColors.primary),
-              ),
-            ),
-
-          // OVERLAY FOR SKELETON (MOCK FOR NOW)
-          if (!_isCountdown)
-            Center(
-              child: Icon(
-                Icons.accessibility_new,
-                size: 250,
-                color: Colors.white.withOpacity(0.1),
               ),
             ),
 
